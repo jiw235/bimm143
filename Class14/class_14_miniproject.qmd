@@ -1,0 +1,789 @@
+---
+title: "Class 14"
+author: "Jingxuan Wu A18624595"
+format: pdf
+---
+
+# Section 1. Differential Expression Analysis
+
+## Load required packages
+
+```{r}
+library(DESeq2)
+library(ggplot2)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+```
+
+## Import count data and metadata
+
+```{r}
+dir.create("data", showWarnings = FALSE)
+
+metaFile <- "data/GSE37704_metadata.csv"
+countFile <- "data/GSE37704_featurecounts.csv"
+
+if (!file.exists(metaFile)) {
+  download.file(
+    "https://bioboot.github.io/bimm143_W18/class-material/GSE37704_metadata.csv",
+    destfile = metaFile,
+    mode = "wb"
+  )
+}
+
+if (!file.exists(countFile)) {
+  download.file(
+    "https://bioboot.github.io/bimm143_W18/class-material/GSE37704_featurecounts.csv",
+    destfile = countFile,
+    mode = "wb"
+  )
+}
+
+colData <- read.csv(metaFile, row.names = 1)
+head(colData)
+
+countData <- read.csv(countFile, row.names = 1)
+head(countData)
+```
+
+## Question 1. Remove the first column from countData
+
+```{r}
+# Remove the length column, leaving only sample counts.
+countData <- as.matrix(countData[, -1, drop = FALSE])
+head(countData)
+```
+
+**Answer:** The first column contains gene lengths, not read counts. Removing
+it leaves a count matrix whose columns correspond to the six RNA-seq samples.
+
+## Question 2. Filter out genes with zero counts
+
+```{r}
+# rowSums(countData) returns the total read count for each gene.
+countData <- countData[rowSums(countData) > 0, , drop = FALSE]
+head(countData)
+
+cat("Genes remaining after filtering:", nrow(countData), "\n")
+```
+
+**Answer:** `rowSums(countData)` calculates the total number of reads for
+ each gene across all samples. The condition `> 0` keeps genes with at least
+one observed read and removes genes that have zero counts everywhere.
+
+## Run DESeq2
+
+```{r}
+# Ensure countData columns and colData rows represent the same samples.
+stopifnot(all(colnames(countData) %in% rownames(colData)))
+colData <- colData[colnames(countData), , drop = FALSE]
+
+# Set the control as the reference group.
+colData$condition <- factor(
+  colData$condition,
+  levels = c("control_sirna", "hoxa1_kd")
+)
+
+# Construct the DESeqDataSet and run differential expression analysis.
+dds <- DESeqDataSetFromMatrix(
+  countData = countData,
+  colData = colData,
+  design = ~ condition
+)
+
+dds <- DESeq(dds)
+dds
+```
+
+## Obtain HOXA1 knockdown versus control results
+
+```{r}
+resultsNames(dds)
+
+res <- results(
+  dds,
+  contrast = c("condition", "hoxa1_kd", "control_sirna")
+)
+head(res)
+```
+
+## Question 3. Summarize differential expression results
+
+```{r}
+summary(res)
+
+n_up <- sum(
+  !is.na(res$padj) & res$padj < 0.1 & res$log2FoldChange > 0
+)
+n_down <- sum(
+  !is.na(res$padj) & res$padj < 0.1 & res$log2FoldChange < 0
+)
+```
+
+**Answer:** At an adjusted p-value cutoff of 0.1, there are **`r n_up`**
+upregulated genes and **`r n_down`** downregulated genes in HOXA1 knockdown
+relative to control. These counts are calculated from the current DESeq2
+results.
+
+## Volcano Plot
+
+```{r}
+res_df <- as.data.frame(res)
+
+ggplot(res_df, aes(x = log2FoldChange, y = -log(padj))) +
+  geom_point(size = 0.6, na.rm = TRUE) +
+  xlab("Log2(FoldChange)") +
+  ylab("-Log(P-value)")
+```
+
+## Question 4. Improve the volcano plot
+
+```{r}
+# Make a color vector for all genes.
+mycols <- rep("gray", nrow(res))
+
+# Color blue the genes with absolute log2 fold change above 2.
+mycols[which(abs(res$log2FoldChange) > 2)] <- "blue"
+
+# Color gray the genes with adjusted p-values greater than 0.01.
+mycols[which(res$padj > 0.01)] <- "gray"
+
+# Add the colors to the data frame so each point keeps the correct color.
+res_df$mycols <- mycols
+
+ggplot(res_df, aes(x = log2FoldChange, y = -log(padj))) +
+  geom_point(aes(color = mycols), size = 0.6, na.rm = TRUE) +
+  scale_color_identity() +
+  xlab("Log2(FoldChange)") +
+  ylab("-Log(P-value)") +
+  geom_vline(xintercept = c(-2, 2)) +
+  geom_hline(yintercept = -log(0.01))
+```
+
+**Answer:** Blue points represent genes with `|log2FoldChange| > 2` and
+`padj <= 0.01`. Gray points do not satisfy both thresholds. The vertical
+lines mark log2 fold changes of -2 and +2, while the horizontal line marks
+an adjusted p-value of 0.01.
+
+## Question 5. Add gene annotation
+
+```{r}
+# Inspect available types of gene annotation.
+head(columns(org.Hs.eg.db), 20)
+
+res$symbol <- mapIds(
+  org.Hs.eg.db,
+  keys = rownames(res),
+  keytype = "ENSEMBL",
+  column = "SYMBOL",
+  multiVals = "first"
+)
+
+res$entrez <- mapIds(
+  org.Hs.eg.db,
+  keys = rownames(res),
+  keytype = "ENSEMBL",
+  column = "ENTREZID",
+  multiVals = "first"
+)
+
+res$name <- mapIds(
+  org.Hs.eg.db,
+  keys = rownames(res),
+  keytype = "ENSEMBL",
+  column = "GENENAME",
+  multiVals = "first"
+)
+
+head(res, 10)
+```
+
+**Answer:** The `mapIds()` function converts Ensembl gene IDs into gene
+symbols, Entrez gene IDs, and descriptive gene names. Entrez IDs are useful
+for the downstream KEGG pathway analysis. Some genes may have missing
+annotations (`NA`).
+
+## Question 6. Sort results and export a CSV file
+
+```{r}
+# Sort by adjusted p-value, with missing values at the end.
+res <- res[order(res$padj, na.last = TRUE), ]
+
+# Export the complete annotated results table.
+write.csv(
+  as.data.frame(res),
+  file = "deseq_results.csv",
+  row.names = TRUE
+)
+
+head(res, 10)
+file.exists("deseq_results.csv")
+```
+
+**Answer:** The results are sorted from the smallest to the largest adjusted
+p-value, putting genes with the strongest statistical evidence first. The
+file `deseq_results.csv` contains the differential expression results and
+gene annotations, with Ensembl IDs preserved as row names.
+
+# Section 2. Pathway Analysis
+
+## Load KEGG Gene Sets
+
+```{r}
+library(pathview)
+library(gage)
+library(gageData)
+
+data(kegg.sets.hs)
+data(sigmet.idx.hs)
+
+# Focus on signaling and metabolic pathways.
+kegg.sets.hs <- kegg.sets.hs[sigmet.idx.hs]
+
+length(kegg.sets.hs)
+
+head(kegg.sets.hs, 3)
+```
+
+## Prepare a Named Fold-Change Vector
+
+```{r}
+# Extract log2 fold changes.
+foldchanges <- res$log2FoldChange
+
+# Use Entrez IDs as names.
+names(foldchanges) <- res$entrez
+
+# Remove missing values and missing IDs.
+valid <- is.finite(foldchanges) &
+  !is.na(names(foldchanges)) &
+  nzchar(names(foldchanges))
+
+foldchanges <- foldchanges[valid]
+
+# Remove duplicate Entrez identifiers.
+foldchanges <- foldchanges[
+  !duplicated(names(foldchanges))
+]
+
+head(foldchanges)
+```
+## Run GAGE Enrichment Analysis
+
+```{r}
+keggres <- gage(
+  foldchanges,
+  gsets = kegg.sets.hs,
+  same.dir = TRUE
+)
+
+attributes(keggres)
+
+head(keggres$greater)
+
+head(keggres$less)
+```
+
+
+## Identify the Top Downregulated Pathway
+
+```{r}
+top_down_pathway <- rownames(keggres$less)[1]
+
+top_down_id <- substr(
+  top_down_pathway,
+  1,
+  8
+)
+
+top_down_pathway
+
+top_down_id
+```
+
+## Plot the Cell Cycle Pathway
+
+```{r}
+#| results: hide
+
+pv_cell <- pathview(
+  gene.data = foldchanges,
+  pathway.id = "hsa04110",
+  species = "hsa",
+  out.suffix = "cell_cycle"
+)
+```
+
+```{r}
+#| echo: false
+#| out-width: "95%"
+
+cell_png <- "hsa04110.cell_cycle.png"
+
+stopifnot(file.exists(cell_png))
+
+knitr::include_graphics(cell_png)
+```
+
+## Graphviz PDF Version of Cell Cycle (Optional)
+
+```{r}
+#| results: hide
+
+tryCatch(
+  pathview(
+    gene.data = foldchanges,
+    pathway.id = "hsa04110",
+    species = "hsa",
+    kegg.native = FALSE,
+    out.suffix = "cell_cycle_vector"
+  ),
+  error = function(e) {
+    message(
+      "Optional Graphviz diagram unavailable: ",
+      conditionMessage(e)
+    )
+  }
+)
+```
+
+```{r}
+#| echo: false
+#| out-width: "95%"
+
+vector_pdf <- "hsa04110.cell_cycle_vector.pdf"
+
+if (file.exists(vector_pdf)) {
+  knitr::include_graphics(vector_pdf)
+}
+```
+
+## Top Five Upregulated KEGG Pathways
+
+```{r}
+# Extract the top five upregulated pathways.
+keggrespathways <- head(
+  rownames(keggres$greater),
+  5
+)
+
+# Extract KEGG pathway IDs.
+keggresids <- substr(
+  keggrespathways,
+  start = 1,
+  stop = 8
+)
+
+keggrespathways
+
+keggresids
+```
+
+```{r}
+#| results: hide
+
+pv_up <- pathview(
+  gene.data = foldchanges,
+  pathway.id = keggresids,
+  species = "hsa",
+  out.suffix = "top_up"
+)
+```
+
+```{r}
+#| echo: false
+#| out-width: "95%"
+
+up_pngs <- paste0(
+  keggresids,
+  ".top_up.png"
+)
+
+stopifnot(all(file.exists(up_pngs)))
+
+knitr::include_graphics(up_pngs)
+```
+
+## Question 7. Plot the Top Five Downregulated Pathways
+
+```{r}
+# Extract the top five downregulated pathways.
+downpathways <- head(
+  rownames(keggres$less),
+  5
+)
+
+# Extract KEGG pathway IDs.
+downids <- substr(
+  downpathways,
+  start = 1,
+  stop = 8
+)
+
+downpathways
+
+downids
+```
+
+```{r}
+#| results: hide
+
+# Generate Pathview figures for all five pathways.
+pv_down <- pathview(
+  gene.data = foldchanges,
+  pathway.id = downids,
+  species = "hsa",
+  out.suffix = "top_down"
+)
+```
+
+```{r}
+#| echo: false
+#| out-width: "95%"
+
+# Include all five pathway figures in the PDF.
+down_pngs <- paste0(
+  downids,
+  ".top_down.png"
+)
+
+stopifnot(all(file.exists(down_pngs)))
+
+knitr::include_graphics(down_pngs)
+```
+
+**Answer:** I selected the five highest-ranked pathways from `keggres$less`, extracted their KEGG IDs, and generated Pathview plots to show the expression changes in each downregulated pathway.
+
+# Section 3. Gene Ontology (GO) Analysis
+
+## Load GO Gene Sets
+
+```{r}
+# Load Gene Ontology datasets from the gageData package.
+library(gage)
+library(gageData)
+
+data(go.sets.hs)
+data(go.subs.hs)
+
+# Focus on the Biological Process subset of GO.
+gobpsets <- go.sets.hs[go.subs.hs$BP]
+
+# Check the number of BP gene sets.
+length(gobpsets)
+
+# Examine the first three GO terms.
+head(gobpsets, 3)
+```
+
+## Perform GO Biological Process Enrichment Analysis
+
+```{r}
+# Run GAGE analysis using the fold changes from Section 2.
+gobpres <- gage(
+  foldchanges,
+  gsets = gobpsets
+)
+
+# Examine the first few upregulated and downregulated GO terms.
+lapply(gobpres, head)
+```
+
+## Interpret GO Enrichment Results
+
+```{r}
+# Examine top upregulated Biological Process terms.
+head(gobpres$greater, 10)
+
+# Examine top downregulated Biological Process terms.
+head(gobpres$less, 10)
+
+# Extract the highest-ranked GO terms.
+top_go_up <- rownames(gobpres$greater)[1]
+top_go_down <- rownames(gobpres$less)[1]
+
+top_go_up
+top_go_down
+```
+# Section 4. Reactome Analysis
+
+## Identify Significant Genes
+
+```{r}
+# Select genes with adjusted p-values <= 0.05.
+sig_genes <- res[
+  !is.na(res$padj) & res$padj <= 0.05,
+  "symbol"
+]
+
+# Remove missing annotations, empty names, and duplicates.
+sig_genes <- unique(as.character(sig_genes))
+
+sig_genes <- sig_genes[
+  !is.na(sig_genes) & nzchar(sig_genes)
+]
+
+# Print the number of significant genes.
+print(
+  paste(
+    "Total number of significant genes:",
+    length(sig_genes)
+  )
+)
+
+# Examine the first ten significant genes.
+head(sig_genes, 10)
+```
+
+## Export Significant Genes
+
+```{r}
+# Save the significant gene symbols as a plain text file.
+write.table(
+  sig_genes,
+  file = "significant_genes.txt",
+  row.names = FALSE,
+  col.names = FALSE,
+  quote = FALSE
+)
+
+# Confirm that the file was created.
+file.exists("significant_genes.txt")
+
+# View the beginning of the exported file.
+head(readLines("significant_genes.txt"), 10)
+```
+
+## Retrieve Reactome Enrichment Results
+
+```{r}
+# Install additional CRAN packages if needed.
+if (!requireNamespace("httr", quietly = TRUE)) {
+  install.packages("httr", repos = "https://cloud.r-project.org")
+}
+
+if (!requireNamespace("jsonlite", quietly = TRUE)) {
+  install.packages("jsonlite", repos = "https://cloud.r-project.org")
+}
+
+# Prepare a plain-text gene list for Reactome.
+reactome_input <- paste(
+  c("#Genes", sig_genes),
+  collapse = "\n"
+)
+
+# Submit genes to Reactome and obtain the top 20 pathways.
+reactome_result <- tryCatch({
+
+  response <- httr::POST(
+    url = paste0(
+      "https://reactome.org/AnalysisService/",
+      "identifiers/projection/"
+    ),
+    query = list(
+      pageSize = 20,
+      page = 1,
+      sortBy = "ENTITIES_PVALUE",
+      order = "ASC"
+    ),
+    body = charToRaw(reactome_input),
+    encode = "raw",
+    httr::add_headers(
+      "Content-Type" = "text/plain"
+    ),
+    httr::timeout(120)
+  )
+
+  httr::stop_for_status(response)
+
+  jsonlite::fromJSON(
+    httr::content(
+      response,
+      as = "text",
+      encoding = "UTF-8"
+    ),
+    simplifyVector = FALSE
+  )
+
+}, error = function(e) {
+
+  message(
+    "Reactome online results unavailable: ",
+    conditionMessage(e)
+  )
+
+  NULL
+
+})
+
+# Convert the pathway results into a table.
+reactome_df <- NULL
+
+if (!is.null(reactome_result) &&
+    length(reactome_result$pathways) > 0) {
+
+  reactome_df <- do.call(
+    rbind,
+    lapply(
+      reactome_result$pathways,
+      function(p) {
+        data.frame(
+          Pathway = p$name,
+          KEGG_Independent_ID = p$stId,
+          Entities_pvalue = as.numeric(p$entities$pValue),
+          Entities_FDR = as.numeric(p$entities$fdr),
+          stringsAsFactors = FALSE
+        )
+      }
+    )
+  )
+
+  # Rank pathways by Entities p-value.
+  reactome_df <- reactome_df[
+    order(reactome_df$Entities_pvalue),
+    ,
+    drop = FALSE
+  ]
+
+  rownames(reactome_df) <- NULL
+
+  # Save the enrichment table.
+  write.csv(
+    reactome_df,
+    file = "reactome_results.csv",
+    row.names = FALSE
+  )
+
+  print(head(reactome_df, 10))
+
+} else {
+
+  cat(
+    "No Reactome API results available.",
+    "Use the exported significant_genes.txt",
+    "file for the online analysis.\n"
+  )
+
+}
+```
+
+## Compare Reactome and KEGG Pathways
+
+```{r}
+# Retrieve the most significant KEGG pathways from Section 2.
+kegg_up <- head(rownames(keggres$greater), 10)
+kegg_down <- head(rownames(keggres$less), 10)
+
+# Display the KEGG results for comparison.
+cat("Top KEGG upregulated pathways:\n")
+print(kegg_up)
+
+cat("\nTop KEGG downregulated pathways:\n")
+print(kegg_down)
+
+# Remove KEGG identifiers to obtain pathway names.
+kegg_names <- sub(
+  "^hsa[0-9]+\\s+",
+  "",
+  c(kegg_up, kegg_down)
+)
+
+# Standardize pathway names for an exact-name comparison.
+normalize_names <- function(x) {
+  trimws(
+    gsub(
+      "[^a-z0-9]+",
+      " ",
+      tolower(x)
+    )
+  )
+}
+
+reactome_answer <- paste(
+  "The most significant Reactome pathway could not be",
+  "determined automatically because the online analysis",
+  "results were unavailable. The gene list was exported",
+  "for analysis in the Reactome Pathway Browser."
+)
+
+comparison_answer <- paste(
+  "Reactome and KEGG may identify related biological",
+  "processes, but their ranked pathway lists are not",
+  "necessarily identical."
+)
+
+if (!is.null(reactome_df) && nrow(reactome_df) > 0) {
+
+  top_reactome <- reactome_df$Pathway[1]
+
+  top_pvalue <- format(
+    reactome_df$Entities_pvalue[1],
+    scientific = TRUE,
+    digits = 4
+  )
+
+  reactome_answer <- paste0(
+    "The Reactome pathway with the smallest Entities ",
+    "p-value was ",
+    top_reactome,
+    " (Entities p-value = ",
+    top_pvalue,
+    ")."
+  )
+
+  shared_names <- intersect(
+    normalize_names(reactome_df$Pathway),
+    normalize_names(kegg_names)
+  )
+
+  if (length(shared_names) > 0) {
+
+    comparison_answer <- paste(
+      "Some pathway names appear in both analyses,",
+      "including:",
+      paste(shared_names, collapse = ", "),
+      ". Other pathways may represent related processes",
+      "despite having different names."
+    )
+
+  } else {
+
+    comparison_answer <- paste(
+      "No exact standardized pathway-name matches were",
+      "found among the retrieved top Reactome and KEGG",
+      "results. However, pathways with different names",
+      "may still describe overlapping biological processes."
+    )
+
+  }
+
+}
+
+# Print the answers.
+cat(reactome_answer, "\n\n")
+cat(comparison_answer, "\n")
+```
+
+## Question 8. Interpret the Reactome Results
+**Answer:**
+
+`r reactome_answer`
+
+`r comparison_answer`
+
+Differences between the two approaches can result from several factors.
+KEGG and Reactome use different pathway databases, gene annotations,
+and pathway definitions. In addition, the GAGE analysis uses log2 fold
+changes across genes to detect coordinated changes within pathways,
+whereas Reactome over-representation analysis uses a list of
+significant genes defined by a statistical cutoff.
+
+Differences in statistical methods, background gene populations, and
+gene coverage can also affect the pathway rankings and significance
+values.
+
+# R Session Information
+
+```{r}
+sessionInfo()
+```

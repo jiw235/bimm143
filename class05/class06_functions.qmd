@@ -1,0 +1,110 @@
+---
+title: "class06-functions"
+author: "Jingxuan Wu"
+date: "2026-10-19"
+format: pdf
+---
+
+
+## Q6. Generalizing Protein B-factor Analysis
+
+### Function Description
+
+**Function name:** `plot_protein_bfactor()`
+
+**Input:** A four-character PDB ID specifying the protein structure to analyze. The function also accepts an optional chain identifier, which defaults to chain A.
+
+**Purpose:** The function reads a protein structure from the Protein Data Bank, extracts the C-alpha atoms from the selected chain, obtains their B-factor values, and creates a B-factor plot.
+
+**Output:** A plot of B-factor values across the selected protein chain. The function also returns the B-factor values invisibly for further analysis.
+
+**Usage:** Call the function with a PDB ID, for example `plot_protein_bfactor("4AKE")`.
+
+### Function Code
+
+```{r}
+library(bio3d)
+
+# Function: plot_protein_bfactor()
+# Input:
+#   pdb_id - a four-character Protein Data Bank ID
+#   chain  - protein chain to analyze (default is "A")
+#
+# Purpose:
+#   Read a PDB structure, select its C-alpha atoms,
+#   extract B-factor values, and plot the results.
+#
+# Output:
+#   A B-factor plot and an invisible vector of
+#   B-factor values for further analysis.
+
+plot_protein_bfactor <- function(pdb_id, chain = "A") {
+
+  # Check that the input PDB ID is valid in format.
+  if (!is.character(pdb_id) ||
+      length(pdb_id) != 1 ||
+      is.na(pdb_id) ||
+      !grepl("^[A-Za-z0-9]{4}$", pdb_id)) {
+    stop("Please provide a valid four-character PDB ID.")
+  }
+
+  # Read the protein structure from the PDB.
+  protein <- read.pdb(pdb_id)
+
+  # Extract C-alpha atoms from the selected chain.
+  protein_ca <- trim.pdb(
+    protein,
+    chain = chain,
+    elety = "CA"
+  )
+
+  # Check that C-alpha atoms were found.
+  if (nrow(protein_ca$atom) == 0) {
+    stop("No C-alpha atoms found in the selected chain.")
+  }
+
+  # Extract B-factor values.
+  b_factors <- protein_ca$atom$b
+
+  # Plot B-factors along the protein sequence.
+  plotb3(
+    b_factors,
+    sse = protein_ca,
+    typ = "l",
+    ylab = "B-factor",
+    main = paste("B-factor Profile:", pdb_id)
+  )
+
+  # Return values invisibly for further analysis.
+  return(invisible(b_factors))
+}
+```
+
+
+### Example 1: PDB 4AKE
+
+This example analyzes the B-factor profile of PDB structure 4AKE.
+
+```{r}
+plot_protein_bfactor("4AKE")
+```
+
+### Example 2: PDB 1AKE
+
+This example analyzes the B-factor profile of PDB structure 1AKE.
+
+```{r}
+plot_protein_bfactor("1AKE")
+```
+
+### Example 3: PDB 1E4Y
+
+This example analyzes the B-factor profile of PDB structure 1E4Y.
+
+```{r}
+plot_protein_bfactor("1E4Y")
+```
+
+Discussion
+The function plot_protein_bfactor() provides a reusable method for analyzing B-factor profiles from different protein structures. The function can accept a PDB ID, extract the C-alpha atoms from the selected chain, and generate a B-factor plot. This makes the analysis more efficient, readable, and easier to apply to additional proteins.
+The resulting plots allow us to compare the distribution of B-factor values across different protein structures. Differences in these profiles may reflect variations in atomic displacement or structural disorder, although B-factor differences alone cannot establish an effect of drug binding.

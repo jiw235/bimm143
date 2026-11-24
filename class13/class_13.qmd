@@ -1,0 +1,844 @@
+---
+title: "Class 13"
+author: "Jingxuan Wu A18624595"
+format: pdf
+---
+
+
+
+```{r}
+library(DESeq2)
+```
+
+# 1. Import countData and colData
+
+```{r}
+counts <- read.csv("airway_scaledcounts.csv", row.names = 1)
+metadata <- read.csv("airway_metadata.csv")
+```
+
+
+```{r}
+head(counts[, 1:4])
+head(metadata)
+dim(counts)
+dim(metadata)
+table(metadata$dex)
+identical(colnames(counts), metadata$id)
+```
+
+## Q1. How many genes are in this dataset?
+
+```{r}
+nrow(counts)
+```
+
+**Answer:** There are `r nrow(counts)` genes in this
+dataset, as determined by the number of rows in the
+count matrix.
+
+## Q2. How many control cell lines do we have?
+
+```{r}
+sum(metadata$dex == "control")
+```
+
+**Answer:** There are `r sum(metadata$dex == "control")`
+control samples in the dataset, corresponding to four
+control cell lines.
+
+
+# 2. Toy Differential Gene Expression
+
+## Inspect the Sample Metadata
+
+```{r}
+head(metadata)
+table(metadata$dex)
+```
+
+## Calculate Mean Counts for Control Samples
+
+```{r}
+# Select control samples
+control <- metadata[metadata$dex == "control", ]
+
+# Extract control count data
+control.counts <- counts[, control$id]
+
+# Calculate mean counts for each gene
+control.mean <- rowMeans(control.counts)
+
+# Inspect the results
+head(control.mean)
+```
+
+## Q3. How Could the Code Be Made More Robust?
+
+**Answer:**
+
+The code can be made more robust by using `rowMeans()` instead of dividing `rowSums()` by a fixed number such as 4. The `rowMeans()` function automatically calculates the mean across the available samples, so the code will still work if the number of control samples changes.
+
+```{r}
+# More robust calculation
+control.mean <- rowMeans(control.counts)
+
+head(control.mean)
+```
+
+## Q4. Calculate Mean Counts for Treated Samples
+
+**Answer:**
+
+The mean gene expression for treated samples can be calculated using the same procedure as for control samples. First, we select the treated samples from the metadata. Then, we calculate the mean expression of each gene using `rowMeans()`.
+
+```{r}
+# Select treated samples
+treated <- metadata[metadata$dex == "treated", ]
+
+# Extract treated count data
+treated.counts <- counts[, treated$id]
+
+# Calculate mean counts for each gene
+treated.mean <- rowMeans(treated.counts)
+
+# Inspect the results
+head(treated.mean)
+```
+
+## Combine Control and Treated Mean Counts
+
+```{r}
+# Combine the mean counts into a data frame
+meancounts <- data.frame(control.mean, treated.mean)
+
+# Inspect the combined data
+head(meancounts)
+
+# Calculate the total mean counts for each group
+colSums(meancounts)
+```
+
+## Q5(a). Scatter Plot of Control and Treated Mean Counts
+
+**Answer:**
+
+```{r}
+# Create a scatter plot using base R
+plot(meancounts$control.mean,
+     meancounts$treated.mean,
+     xlab = "Control",
+     ylab = "Treated",
+     main = "Control vs Treated Mean Gene Expression",
+     pch = 1,
+     cex = 0.5)
+```
+
+## Q5(b). Scatter Plot Using ggplot2
+
+**Answer:**
+
+The `geom_point()` function is used to create a scatter plot with ggplot2.
+
+```{r}
+# Load ggplot2
+library(ggplot2)
+
+# Create a scatter plot using ggplot2
+ggplot(meancounts,
+       aes(x = control.mean, y = treated.mean)) +
+  geom_point(alpha = 0.4, size = 0.7) +
+  labs(
+    title = "Control vs Treated Mean Gene Expression",
+    x = "Control Mean",
+    y = "Treated Mean"
+  ) +
+  theme_minimal()
+```
+
+## Q6. Scatter Plot Using Logarithmic Scales
+
+**Answer:**
+
+The argument `log = "xy"` allows both the x-axis and y-axis to be displayed on logarithmic scales in the `plot()` function.
+
+Using logarithmic scales makes it easier to visualize genes with low expression levels, which are difficult to distinguish on the original linear scale.
+
+```{r}
+# Select genes with positive mean counts in both groups
+positive <- meancounts$control.mean > 0 &
+            meancounts$treated.mean > 0
+
+# Create a scatter plot using logarithmic scales
+plot(meancounts$control.mean[positive],
+     meancounts$treated.mean[positive],
+     log = "xy",
+     xlab = "log Control",
+     ylab = "log Treated",
+     main = "Control vs Treated (Log Scale)",
+     pch = 1,
+     cex = 0.5)
+```
+
+## Calculate Log2 Fold Change
+
+```{r}
+# Calculate log2 fold change
+meancounts$log2fc <- log2(
+  meancounts$treated.mean / meancounts$control.mean
+)
+
+# Inspect the results
+head(meancounts)
+```
+
+Some genes have zero expression in one or both groups. These values can produce `NaN`, `Inf`, or `-Inf` when calculating the log2 fold change.
+
+We therefore identify and remove genes with zero mean counts before proceeding.
+
+```{r}
+# Identify zero values in the first two columns
+zero.vals <- which(meancounts[, 1:2] == 0,
+                   arr.ind = TRUE)
+
+# Extract unique row indices
+to.rm <- unique(zero.vals[, 1])
+
+# Remove genes containing zero mean counts
+mycounts <- meancounts[
+  !(seq_len(nrow(meancounts)) %in% to.rm),
+  ,
+  drop = FALSE
+]
+
+# Inspect the filtered dataset
+head(mycounts)
+
+# Check the dimensions
+dim(mycounts)
+```
+
+## Q7. What Is the Purpose of arr.ind and unique()?
+
+**Answer:**
+
+The argument `arr.ind = TRUE` makes the `which()` function return the row and column indices of elements that satisfy the condition, instead of returning their positions in a single vector.
+
+We select the first column because it contains the row indices, which identify the genes that have zero mean expression.
+
+The `unique()` function removes duplicate row indices because the same gene may have zero expression in both the control and treated groups. This ensures that each gene is identified only once for removal.
+
+## Identify Upregulated and Downregulated Genes
+
+```{r}
+# Identify upregulated genes
+up.ind <- mycounts$log2fc > 2
+
+# Identify downregulated genes
+down.ind <- mycounts$log2fc < -2
+
+# Count upregulated and downregulated genes
+sum(up.ind)
+sum(down.ind)
+```
+
+## Q8. How Many Genes Are Upregulated?
+
+```{r}
+# Count genes with log2FC > 2
+sum(up.ind)
+```
+
+**Answer:**
+
+There are `r sum(up.ind)` genes with a log2 fold change greater than 2, indicating an increase of more than fourfold in mean expression in the treated group.
+
+## Q9. How Many Genes Are Downregulated?
+
+```{r}
+# Count genes with log2FC < -2
+sum(down.ind)
+```
+
+**Answer:**
+
+There are `r sum(down.ind)` genes with a log2 fold change less than -2, indicating a decrease of more than fourfold in mean expression in the treated group.
+
+## Summary of Candidate Differentially Expressed Genes
+
+```{r}
+# Create a summary table
+de_summary <- data.frame(
+  Regulation = c("Upregulated", "Downregulated", "Total"),
+  Gene_Count = c(
+    sum(up.ind),
+    sum(down.ind),
+    sum(up.ind) + sum(down.ind)
+  )
+)
+
+de_summary
+```
+
+## Q10. Do You Trust These Results? Why or Why Not?
+
+**Answer:**
+
+No, these results should not be considered reliable evidence of differential gene expression.
+
+First, this simplified analysis compares mean expression values without properly accounting for differences in sequencing depth between samples.
+
+Second, it does not account for biological variability among replicates or perform statistical significance testing.
+
+Third, identifying differentially expressed genes solely based on log2 fold change can produce misleading results, particularly for genes with low expression levels.
+
+
+# 5. Setting up for DESeq
+
+## Load the DESeq2 Package
+
+```{r}
+library(DESeq2)
+library(ggplot2)
+```
+
+## DESeq2 Package Citation
+
+```{r}
+citation("DESeq2")
+```
+
+## Prepare Sample Metadata
+
+```{r}
+# Inspect sample metadata
+head(metadata)
+
+# Examine treatment groups
+table(metadata$dex)
+
+# Match metadata to the count matrix
+metadata <- metadata[
+  match(colnames(counts), metadata$id),
+  ,
+  drop = FALSE
+]
+
+# Set sample IDs as row names
+rownames(metadata) <- metadata$id
+
+# Set control as the reference group
+metadata$dex <- factor(
+  metadata$dex,
+  levels = c("control", "treated")
+)
+
+# Check that sample identifiers match
+stopifnot(
+  identical(rownames(metadata), colnames(counts))
+)
+
+# Inspect the updated metadata
+metadata
+```
+
+## Create the DESeqDataSet Object
+
+```{r}
+# Create DESeqDataSet
+dds <- DESeqDataSetFromMatrix(
+  countData = counts,
+  colData = metadata,
+  design = ~ dex
+)
+
+# Inspect the DESeqDataSet
+dds
+```
+
+## Inspect the Experimental Design
+
+```{r}
+# Show the design formula
+design(dds)
+
+# Show sample metadata
+head(as.data.frame(colData(dds)))
+
+# Show the dimensions of the dataset
+dim(dds)
+```
+
+**Interpretation:**
+
+The DESeqDataSet contains gene expression counts and sample information for eight RNA-seq samples. The experimental design compares dexamethasone-treated samples against untreated controls.
+
+The control group is specified as the reference level, allowing the analysis to estimate treatment-associated changes in gene expression.
+
+# 6. Principal Component Analysis (PCA)
+
+## Variance Stabilizing Transformation
+
+```{r}
+# Apply variance stabilizing transformation
+vsd <- vst(dds, blind = FALSE)
+
+# Inspect the transformed data
+vsd
+```
+
+## PCA Plot Using DESeq2
+
+```{r}
+#| fig-width: 7
+#| fig-height: 5.5
+#| fig-cap: "PCA of control and dexamethasone-treated samples using DESeq2."
+
+# Generate PCA plot
+plotPCA(vsd, intgroup = c("dex"))
+```
+
+## Extract PCA Data
+
+The `plotPCA()` function can also return the underlying PCA coordinates instead of directly producing a plot.
+
+```{r}
+# Extract PCA coordinates
+pcaData <- plotPCA(
+  vsd,
+  intgroup = c("dex"),
+  returnData = TRUE
+)
+
+# Inspect PCA data
+head(pcaData)
+
+# Calculate percentage of variance explained
+percentVar <- round(
+  100 * attr(pcaData, "percentVar")
+)
+
+percentVar
+```
+
+## PCA Plot Using ggplot2
+
+```{r}
+#| fig-width: 7
+#| fig-height: 5.5
+#| fig-cap: "PCA plot showing the distribution of control and treated RNA-seq samples."
+
+ggplot(pcaData) +
+  aes(x = PC1, y = PC2, color = dex) +
+  geom_point(size = 3) +
+  xlab(
+    paste0("PC1: ", percentVar[1], "% variance")
+  ) +
+  ylab(
+    paste0("PC2: ", percentVar[2], "% variance")
+  ) +
+  coord_fixed() +
+  theme_bw()
+```
+
+## PCA Interpretation
+
+**Answer:**
+
+The PCA plot shows that control and dexamethasone-treated samples are largely separated along the first principal component, suggesting that treatment status is an important source of variation in gene expression.
+
+PC1 explains `r percentVar[1]`% of the total variance, while PC2 explains `r percentVar[2]`%.
+
+The separation between the two treatment groups suggests that dexamethasone treatment is associated with changes in the overall gene expression profiles of airway smooth muscle cells.
+
+# 7. DESeq Analysis
+
+## Run the DESeq2 Pipeline
+
+```{r}
+# Perform differential expression analysis
+dds <- DESeq(dds)
+
+# Inspect the updated dataset
+dds
+```
+
+## Extract Differential Expression Results
+
+```{r}
+# Extract results
+res <- results(dds)
+
+# Inspect the results
+res
+
+# View the first six genes
+head(as.data.frame(res))
+```
+
+
+## Inspect Missing Adjusted P-values
+
+```{r}
+# Count missing adjusted p-values
+sum(is.na(res$padj))
+
+# Count missing raw p-values
+sum(is.na(res$pvalue))
+
+# Identify genes with missing adjusted p-values
+# but available raw p-values
+sum(!is.na(res$pvalue) & is.na(res$padj))
+
+# Compare baseMean and adjusted p-values
+head(
+  as.data.frame(res)[
+    ,
+    c("baseMean", "pvalue", "padj")
+  ]
+)
+```
+
+## Summarize Differential Expression Results
+
+By default, DESeq2 uses an adjusted p-value threshold of 0.1.
+
+```{r}
+# Summarize results with adjusted p-value < 0.1
+summary(res)
+```
+
+## Count Significant Genes at FDR < 0.1
+
+```{r}
+# Significant upregulated genes
+up01 <- sum(
+  res$padj < 0.1 &
+  res$log2FoldChange > 0,
+  na.rm = TRUE
+)
+
+# Significant downregulated genes
+down01 <- sum(
+  res$padj < 0.1 &
+  res$log2FoldChange < 0,
+  na.rm = TRUE
+)
+
+# Print results
+up01
+down01
+up01 + down01
+```
+
+## Differential Expression Results at FDR < 0.05
+
+To apply a more stringent significance threshold, we extract the results again with `alpha = 0.05`.
+
+```{r}
+# Extract results using alpha = 0.05
+res05 <- results(dds, alpha = 0.05)
+
+# Summarize results
+summary(res05)
+
+# Inspect the results
+head(as.data.frame(res05))
+```
+
+## Count Significant Genes at FDR < 0.05
+
+```{r}
+# Count significant upregulated genes
+up05 <- sum(
+  res05$padj < 0.05 &
+  res05$log2FoldChange > 0,
+  na.rm = TRUE
+)
+
+# Count significant downregulated genes
+down05 <- sum(
+  res05$padj < 0.05 &
+  res05$log2FoldChange < 0,
+  na.rm = TRUE
+)
+
+# Print results
+up05
+down05
+up05 + down05
+```
+
+## Compare Significance Thresholds
+
+```{r}
+# Create a summary table
+deseq_summary <- data.frame(
+  Threshold = c("FDR < 0.1", "FDR < 0.05"),
+  Upregulated = c(up01, up05),
+  Downregulated = c(down01, down05),
+  Total = c(
+    up01 + down01,
+    up05 + down05
+  )
+)
+
+# Display the summary
+deseq_summary
+```
+
+
+# 8. Adding Annotation Data
+
+## Load Annotation Packages
+
+```{r}
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+```
+
+## Explore Available Annotation Types
+
+```{r}
+# Display available annotation columns
+AnnotationDbi::columns(org.Hs.eg.db)
+```
+
+## Add Gene Symbols
+
+```{r}
+# Convert Ensembl IDs to gene symbols
+res$symbol <- AnnotationDbi::mapIds(
+  org.Hs.eg.db,
+  keys = rownames(res),
+  keytype = "ENSEMBL",
+  column = "SYMBOL",
+  multiVals = "first"
+)
+
+# Inspect the annotated results
+head(as.data.frame(res))
+```
+
+## Q11. Add Entrez IDs, UniProt Accessions, and Gene Names
+
+**Answer:**
+
+The `mapIds()` function was used to map Ensembl gene identifiers to Entrez gene IDs, UniProt accessions, and full gene names.
+
+The argument `keytype = "ENSEMBL"` specifies the type of input identifiers, while `multiVals = "first"` selects the first available annotation when multiple mappings exist.
+
+```{r}
+# Add Entrez gene IDs
+res$entrez <- AnnotationDbi::mapIds(
+  org.Hs.eg.db,
+  keys = rownames(res),
+  keytype = "ENSEMBL",
+  column = "ENTREZID",
+  multiVals = "first"
+)
+
+# Add UniProt accessions
+res$uniprot <- AnnotationDbi::mapIds(
+  org.Hs.eg.db,
+  keys = rownames(res),
+  keytype = "ENSEMBL",
+  column = "UNIPROT",
+  multiVals = "first"
+)
+
+# Add full gene names
+res$genename <- AnnotationDbi::mapIds(
+  org.Hs.eg.db,
+  keys = rownames(res),
+  keytype = "ENSEMBL",
+  column = "GENENAME",
+  multiVals = "first"
+)
+
+# Inspect annotated results
+head(as.data.frame(res))
+```
+
+## Sort Results by Adjusted P-value
+
+```{r}
+# Order genes by adjusted p-value
+ord <- order(res$padj)
+
+# Inspect the most significant genes
+head(as.data.frame(res[ord, ]))
+```
+
+## Export Annotated DESeq2 Results
+
+```{r}
+# Export results as a CSV file
+write.csv(
+  as.data.frame(res[ord, ]),
+  "deseq_results.csv"
+)
+
+# Confirm the file was created
+file.exists("deseq_results.csv")
+```
+
+# 9. Data Visualization
+
+## Basic Volcano Plot
+
+```{r}
+#| fig-width: 7
+#| fig-height: 5
+#| fig-cap: "Volcano plot of differential gene expression."
+
+# Identify genes with finite values
+valid <- is.finite(res$log2FoldChange) &
+         is.finite(res$padj) &
+         res$padj > 0
+
+# Create a basic volcano plot
+plot(
+  res$log2FoldChange[valid],
+  -log(res$padj[valid]),
+  xlab = "Log2(FoldChange)",
+  ylab = "-Log(Adjusted P-value)",
+  main = "Volcano Plot",
+  pch = 1,
+  cex = 0.5
+)
+```
+
+## Volcano Plot with Cutoff Lines
+
+```{r}
+#| fig-width: 7
+#| fig-height: 5
+#| fig-cap: "Volcano plot with fold-change and significance thresholds."
+
+plot(
+  res$log2FoldChange[valid],
+  -log(res$padj[valid]),
+  xlab = "Log2(FoldChange)",
+  ylab = "-Log(Adjusted P-value)",
+  main = "Volcano Plot with Cutoffs",
+  pch = 1,
+  cex = 0.5
+)
+
+# Add vertical cutoff lines
+abline(
+  v = c(-2, 2),
+  col = "darkgray",
+  lty = 2
+)
+
+# Add horizontal significance cutoff
+abline(
+  h = -log(0.05),
+  col = "darkgray",
+  lty = 2
+)
+```
+
+## Volcano Plot with Custom Colors
+
+```{r}
+# Define the color vector
+mycols <- rep("gray", nrow(res))
+
+# Highlight genes with large fold changes
+large_fc <- !is.na(res$log2FoldChange) &
+            abs(res$log2FoldChange) > 2
+
+mycols[large_fc] <- "red"
+
+# Highlight genes passing both thresholds
+inds <- !is.na(res$padj) &
+        res$padj < 0.01 &
+        large_fc
+
+mycols[inds] <- "blue"
+
+# Count highlighted genes
+sum(inds)
+```
+
+```{r}
+#| fig-width: 7
+#| fig-height: 5
+#| fig-cap: "Colored volcano plot highlighting genes with large fold changes and significant adjusted p-values."
+
+plot(
+  res$log2FoldChange[valid],
+  -log(res$padj[valid]),
+  col = mycols[valid],
+  xlab = "Log2(FoldChange)",
+  ylab = "-Log(Adjusted P-value)",
+  main = "Differential Gene Expression Volcano Plot",
+  pch = 1,
+  cex = 0.6
+)
+
+# Add cutoff lines
+abline(
+  v = c(-2, 2),
+  col = "gray",
+  lty = 2
+)
+
+abline(
+  h = -log(0.01),
+  col = "gray",
+  lty = 2
+)
+```
+
+## Enhanced Volcano Plot
+
+```{r}
+# Convert results into a data frame
+x <- as.data.frame(res)
+
+# Use Ensembl IDs when gene symbols are unavailable
+x$symbol[is.na(x$symbol)] <-
+  rownames(x)[is.na(x$symbol)]
+
+# Inspect results
+head(x)
+```
+
+```{r}
+#| fig-width: 9
+#| fig-height: 7
+#| fig-cap: "Enhanced volcano plot showing gene symbols and differential expression results."
+
+# Draw the EnhancedVolcano figure if installed
+if (requireNamespace("EnhancedVolcano", quietly = TRUE)) {
+
+  print(
+    EnhancedVolcano::EnhancedVolcano(
+      x,
+      lab = x$symbol,
+      x = "log2FoldChange",
+      y = "pvalue",
+      title = "Volcano Plot",
+      subtitle = "Dexamethasone Treated vs Control",
+      pCutoff = 0.05,
+      FCcutoff = 2,
+      pointSize = 1.5,
+      labSize = 3
+    )
+  )
+
+} else {
+  cat("EnhancedVolcano is not installed. Optional plot skipped.")
+}
+```
+
+
+# Session Information
+
+```{r}
+sessionInfo()
+```

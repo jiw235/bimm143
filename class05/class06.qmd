@@ -1,0 +1,199 @@
+---
+title: "class06"
+author: "Jingxuan Wu"
+date: "2026-10-18"
+format: pdf
+---
+
+
+## Q1. Write your first R function: add()
+
+### Q1a. Adding two numbers
+
+```{r}
+# Define a function that adds two numbers.
+add <- function(x, y) {
+  # Calculate and return the sum of x and y.
+  result <- x + y
+  return(result)
+}
+
+# Test the function.
+add(4, 7)
+```
+
+### Q1b. Adding numbers from a vector
+
+```{r}
+# Define a function that accepts one or two inputs.
+add <- function(x, y = NULL) {
+  # If only x is provided, sum all elements of x.
+  if (is.null(y)) {
+    return(sum(x))
+  }
+
+  # If both x and y are provided, add them together.
+  return(sum(c(x, y)))
+}
+
+# Test the function with two numbers.
+add(4, 7)
+
+# Test the function with a vector.
+add(c(4, 7, 10))
+```
+
+### Q1c. Adding any number of inputs
+
+```{r}
+# The ... argument allows any number of inputs.
+add <- function(...) {
+  # Combine the inputs and calculate their sum.
+  return(sum(...))
+}
+
+# Test all three examples.
+add(4, 7)
+add(c(4, 7, 10))
+add(1, 2, 3, -4)
+```
+
+## Q2. Write a generate_dna() function
+
+### Q2a. Generate a vector of DNA nucleotides
+
+```{r}
+# Generate random DNA nucleotides.
+generate_dna <- function(length) {
+  # Define the four DNA nucleotides.
+  bases <- c("A", "T", "G", "C")
+
+  # Randomly sample nucleotides.
+  dna <- sample(bases, size = length, replace = TRUE)
+
+  return(dna)
+}
+
+generate_dna(6)
+```
+
+### Q2b. Return a vector or a single DNA string
+
+```{r}
+# Generate DNA as a vector or a string.
+generate_dna <- function(length, as_string = FALSE) {
+  bases <- c("A", "T", "G", "C")
+  dna <- sample(bases, size = length, replace = TRUE)
+
+  # Combine letters when a string is requested.
+  if (as_string) {
+    return(paste(dna, collapse = ""))
+  }
+
+  return(dna)
+}
+
+generate_dna(6)
+generate_dna(6, as_string = TRUE)
+```
+
+### Q2c. Generate DNA in FASTA format
+
+```{r}
+# Generate and print a random DNA sequence in FASTA format.
+generate_dna <- function(length, as_string = TRUE) {
+  bases <- c("A", "T", "G", "C")
+  dna <- sample(bases, size = length, replace = TRUE)
+
+  sequence <- paste(dna, collapse = "")
+
+  # Print the FASTA identifier and sequence.
+  cat(">len", length, "\n", sequence, "\n", sep = "")
+
+  # Return either a string or a nucleotide vector.
+  if (as_string) {
+    return(invisible(sequence))
+  }
+
+  return(invisible(dna))
+}
+
+generate_dna(11)
+```
+
+## Q3. Write a generate_protein() function
+
+```{r}
+# Generate a random protein sequence.
+generate_protein <- function(length) {
+
+  # Define the 20 standard amino acids.
+  amino_acids <- c(
+    "A", "R", "N", "D", "C",
+    "E", "Q", "G", "H", "I",
+    "L", "K", "M", "F", "P",
+    "S", "T", "W", "Y", "V"
+  )
+
+  # Randomly select amino acids.
+  protein <- sample(
+    amino_acids,
+    size = length,
+    replace = TRUE
+  )
+
+  # Combine amino acids into one sequence.
+  return(paste(protein, collapse = ""))
+}
+
+# Test the function.
+generate_protein(6)
+```
+
+## Q4. Generate Random Protein Sequences
+
+```{r}
+# Set a seed to make the sequences reproducible.
+set.seed(14306)
+
+# Define the requested peptide lengths.
+lengths <- 6:13
+
+# Generate one peptide for each length.
+peptides <- sapply(lengths, generate_protein)
+
+# Print all peptides in FASTA format.
+for (i in seq_along(lengths)) {
+  cat(">id.", lengths[i], "\n", peptides[i], "\n", sep = "")
+}
+```
+
+## Q5. BLASTp Search Against nr
+
+Eight random peptide sequences of lengths 6–13 amino acids were searched against the NCBI non-redundant protein (nr) database using BLASTp.
+
+A peptide was classified as unique if no match had both 100% query coverage and 100% sequence identity.
+
+| Length (aa) | Best hit % identity | Best hit % coverage | Unique? (Y/N) |
+|---|---|---|---|
+| 6 | 100.00% | 100% | N |
+| 7 | 100.00% | 100% | N |
+| 8 | 87.50% | 100% | Y |
+| 9 | 87.50% | 89% | Y |
+| 10 | 80.00% | 100% | Y |
+| 11 | 90.91% | 100% | Y |
+| 12 | 90.00% | 83% | Y |
+| 13 | 84.62% | 100% | Y |
+
+### Q5a. At which length do peptides become unique?
+
+My randomly generated peptides start to appear unique at a length of 8 amino acids. Peptides of length 6 and 7 had matches with 100% query coverage and 100% identity, while peptides of length 8 through 13 did not.
+
+### Q5b. Why are longer peptides more likely to be unique?
+
+Because there are fewer possible amino acid combinations. The number of possible sequences increases exponentially with peptide length ($20^L$), while the number of known protein sequences is limited. Therefore, longer random peptides are less likely to have an exact match in the nr database.
+
+## Q6. Connecting Findings to Immunology
+
+Based on my BLASTp results, a minimum peptide length of approximately 8–9 amino acids may help the immune system distinguish foreign peptides from common sequences. My peptides of length 6 and 7 had exact matches in the nr database, whereas peptides of length 8–13 did not. Very short peptides have fewer possible amino acid combinations and are more likely to be shared among different proteins. Presenting very short peptides could therefore make it harder for T cells to distinguish self from non-self. Longer peptides provide more sequence diversity and may support more specific immune recognition.
+

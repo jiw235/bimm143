@@ -1,0 +1,508 @@
+---
+title: "Class 05: Data Visualization with ggplot2"
+author: "Jingxuan Wu"
+date: "2026-10-19"
+format: pdf
+---
+
+
+## 6. Creating Scatter Plots
+
+### Specifying a dataset with ggplot()
+
+First, we load the ggplot2 package.
+
+```{r}
+library(ggplot2)
+```
+
+We will use the built-in `cars` dataset, which contains information about the speed and stopping distance of cars.
+
+```{r}
+head(cars)
+```
+
+The `ggplot()` function specifies the dataset and creates the base for our plot.
+
+```{r}
+ggplot(cars)
+```
+
+### Specifying aesthetic mappings with aes()
+
+We map car speed to the x-axis and stopping distance to the y-axis.
+
+```{r}
+ggplot(cars) +
+  aes(x = speed, y = dist)
+```
+
+### Creating a scatter plot with geom_point()
+
+```{r}
+ggplot(cars) +
+  aes(x = speed, y = dist) +
+  geom_point()
+```
+
+### Adding a trend line with geom_smooth()
+
+```{r}
+ggplot(cars) +
+  aes(x = speed, y = dist) +
+  geom_point() +
+  geom_smooth()
+```
+
+### Adding a linear regression line
+
+We use a linear model and remove the shaded standard error region.
+
+```{r}
+ggplot(cars) +
+  aes(x = speed, y = dist) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+### Adding labels and a black-and-white theme
+
+```{r}
+ggplot(cars) +
+  aes(x = speed, y = dist) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Speed and Stopping Distances of Cars",
+    subtitle = "Relationship between car speed and stopping distance",
+    x = "Speed (MPH)",
+    y = "Stopping Distance (ft)",
+    caption = "Dataset: cars"
+  ) +
+  theme_bw()
+```
+
+### Interpretation
+
+The scatter plot shows a positive relationship between car speed and stopping distance. Cars traveling at higher speeds generally require longer distances to stop.
+
+
+## Adding More Plot Aesthetics Through aes()
+
+### Loading the Gene Expression Dataset
+
+We load a differential gene expression dataset containing expression values for two experimental conditions.
+
+```{r}
+url <- "https://bioboot.github.io/bimm143_S20/class-material/up_down_expression.txt"
+genes <- read.delim(url)
+head(genes)
+```
+
+### Exploring the Dataset
+
+We use nrow() to determine the total number of genes.
+
+```{r}
+nrow(genes)
+```
+
+We examine the column names and the number of columns.
+
+```{r}
+colnames(genes)
+ncol(genes)
+```
+
+We count the number of genes in each expression category.
+
+```{r}
+table(genes$State)
+```
+
+We calculate the fraction of up-regulated genes to two significant figures.
+
+```{r}
+up_count <- sum(genes$State == "up")
+total_genes <- nrow(genes)
+
+signif(up_count / total_genes, 2)
+```
+
+### Creating a Basic Gene Expression Scatter Plot
+
+```{r}
+ggplot(genes) +
+  aes(x = Condition1, y = Condition2) +
+  geom_point()
+```
+
+### Mapping Gene Expression State to Color
+
+```{r}
+p <- ggplot(genes) +
+  aes(x = Condition1, y = Condition2, col = State) +
+  geom_point()
+
+p
+```
+
+### Customizing the Colors
+
+```{r}
+p + scale_colour_manual(
+  values = c(
+    down = "blue",
+    unchanging = "gray",
+    up = "red"
+  )
+)
+```
+
+### Adding Plot Labels
+
+```{r}
+p +
+  scale_colour_manual(
+    values = c(
+      down = "blue",
+      unchanging = "gray",
+      up = "red"
+    )
+  ) +
+  labs(
+    title = "Gene Expression Changes Upon Drug Treatment",
+    x = "Control (no drug)",
+    y = "Drug Treatment"
+  )
+```
+
+### Interpretation
+
+The scatter plot compares gene expression between the control and drug treatment conditions. Red points represent up-regulated genes, blue points represent down-regulated genes, and gray points represent genes with no significant change in expression.
+
+
+## 7. Going Further
+
+### Loading the Gapminder Dataset
+
+We use the Gapminder dataset to explore relationships between GDP per capita, life expectancy, population, and continent.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(gapminder)
+
+gapminder_2007 <- gapminder %>%
+  filter(year == 2007)
+
+nrow(gapminder_2007)
+```
+
+### Basic Scatter Plot for 2007
+
+```{r}
+ggplot(gapminder_2007) +
+  aes(x = gdpPercap, y = lifeExp) +
+  geom_point()
+```
+
+### Adjusting Point Transparency
+
+```{r}
+ggplot(gapminder_2007) +
+  aes(x = gdpPercap, y = lifeExp) +
+  geom_point(alpha = 0.5)
+```
+
+### Mapping Continent to Color and Population to Size
+
+```{r}
+ggplot(gapminder_2007) +
+  aes(
+    x = gdpPercap,
+    y = lifeExp,
+    color = continent,
+    size = pop
+  ) +
+  geom_point(alpha = 0.5)
+```
+
+### Mapping Population to Color
+
+```{r}
+ggplot(gapminder_2007) +
+  aes(
+    x = gdpPercap,
+    y = lifeExp,
+    color = pop
+  ) +
+  geom_point(alpha = 0.8)
+```
+
+### Adjusting Point Size by Population
+
+```{r}
+ggplot(gapminder_2007) +
+  aes(
+    x = gdpPercap,
+    y = lifeExp,
+    size = pop
+  ) +
+  geom_point(alpha = 0.5)
+```
+
+### Using scale_size_area()
+
+```{r}
+ggplot(gapminder_2007) +
+  geom_point(
+    aes(
+      x = gdpPercap,
+      y = lifeExp,
+      size = pop
+    ),
+    alpha = 0.5
+  ) +
+  scale_size_area(max_size = 10)
+```
+
+### Scatter Plot for 1957
+
+We filter the dataset to include only observations from 1957.
+
+```{r}
+gapminder_1957 <- gapminder %>%
+  filter(year == 1957)
+
+ggplot(gapminder_1957) +
+  aes(
+    x = gdpPercap,
+    y = lifeExp,
+    color = continent,
+    size = pop
+  ) +
+  geom_point(alpha = 0.7) +
+  scale_size_area(max_size = 15)
+```
+
+### Comparing 1957 and 2007
+
+In 1957, most countries had lower GDP per capita and lower life expectancy than in 2007. Comparing two separate plots is difficult because the scales and point sizes may differ. Combining both years into one figure makes the comparison easier.
+
+### Faceted Scatter Plot for 1957 and 2007
+
+```{r}
+gapminder_both <- gapminder %>%
+  filter(year %in% c(1957, 2007))
+
+ggplot(gapminder_both) +
+  aes(
+    x = gdpPercap,
+    y = lifeExp,
+    color = continent,
+    size = pop
+  ) +
+  geom_point(alpha = 0.7) +
+  scale_size_area(max_size = 15) +
+  facet_wrap(~year)
+```
+
+### Interpretation
+
+The faceted scatter plot shows that both GDP per capita and life expectancy generally increased between 1957 and 2007. The relationship between economic development and life expectancy is positive, although differences remain across countries and continents.
+
+
+## 8. OPTIONAL: Bar Charts
+
+### Selecting the Five Most Populous Countries in 2007
+
+We use the Gapminder dataset to identify the five countries with the largest populations in 2007.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(gapminder)
+
+gapminder_top5 <- gapminder %>%
+  filter(year == 2007) %>%
+  arrange(desc(pop)) %>%
+  top_n(5, pop)
+
+gapminder_top5
+```
+
+### Creating a Simple Bar Chart
+
+```{r}
+ggplot(gapminder_top5) +
+  geom_col(aes(x = country, y = pop))
+```
+
+### Comparing Life Expectancy
+
+```{r}
+ggplot(gapminder_top5) +
+  geom_col(aes(x = country, y = lifeExp))
+```
+
+### Filling Bars by Continent
+
+```{r}
+ggplot(gapminder_top5) +
+  geom_col(aes(x = country, y = pop, fill = continent))
+```
+
+### Filling Bars by Life Expectancy
+
+```{r}
+ggplot(gapminder_top5) +
+  geom_col(aes(x = country, y = pop, fill = lifeExp))
+```
+
+### Filling Bars by GDP per Capita
+
+```{r}
+ggplot(gapminder_top5) +
+  aes(x = country, y = pop, fill = gdpPercap) +
+  geom_col()
+```
+
+### Ordering Countries by Population
+
+```{r}
+ggplot(gapminder_top5) +
+  aes(x = reorder(country, -pop), y = pop, fill = gdpPercap) +
+  geom_col()
+```
+
+### Filling Each Bar by Country
+
+```{r}
+ggplot(gapminder_top5) +
+  aes(x = reorder(country, -pop), y = pop, fill = country) +
+  geom_col(col = "gray30") +
+  guides(fill = "none")
+```
+
+### Flipping Bar Charts
+
+We use the built-in USArrests dataset to visualize murder rates across US states.
+
+```{r}
+head(USArrests)
+```
+
+We add the state names as a column.
+
+```{r}
+USArrests$State <- rownames(USArrests)
+```
+
+We create a horizontal bar chart showing murder rates across states.
+
+```{r}
+ggplot(USArrests) +
+  aes(x = reorder(State, Murder), y = Murder) +
+  geom_col() +
+  coord_flip()
+```
+
+### Creating a Lollipop Chart
+
+We use points and line segments as an alternative to a crowded bar chart.
+
+```{r}
+ggplot(USArrests) +
+  aes(x = reorder(State, Murder), y = Murder) +
+  geom_point() +
+  geom_segment(
+    aes(
+      x = State,
+      xend = State,
+      y = 0,
+      yend = Murder
+    ),
+    color = "blue"
+  ) +
+  coord_flip()
+```
+
+### Interpretation
+
+The bar charts show that China and India had the largest populations among the five selected countries in 2007. Using fill colors allows us to represent additional variables, such as continent, life expectancy, and GDP per capita.
+
+Reordering bars makes comparisons easier. For the USArrests dataset, a horizontal lollipop chart provides a less crowded alternative to a bar chart with 50 categories.
+
+
+
+## 9. Extensions: Animation
+
+The gganimate package allows us to visualize changes in GDP per capita, life expectancy, and population over time.
+
+An animated version of this plot can be exported separately as a GIF.
+
+### Static Representation of the Animation
+
+```{r}
+ggplot(
+  subset(gapminder, year == 2007),
+  aes(
+    x = gdpPercap,
+    y = lifeExp,
+    size = pop,
+    color = continent
+  )
+) +
+  geom_point(alpha = 0.7) +
+  scale_x_log10() +
+  facet_wrap(~continent) +
+  labs(
+    title = "Gapminder Data in 2007",
+    x = "GDP per capita",
+    y = "Life expectancy"
+  )
+```
+
+
+## 10. Combining Plots
+
+The patchwork package allows us to combine multiple ggplot2 figures into one multi-panel plot.
+
+### Creating Four Different Plots
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+p1 <- ggplot(mtcars) +
+  geom_point(aes(mpg, disp))
+
+p2 <- ggplot(mtcars) +
+  geom_boxplot(aes(gear, disp, group = gear))
+
+p3 <- ggplot(mtcars) +
+  geom_smooth(aes(disp, qsec))
+
+p4 <- ggplot(mtcars) +
+  geom_bar(aes(carb))
+```
+
+### Combining the Plots with Patchwork
+
+```{r}
+(p1 | p2 | p3) / p4
+```
+
+### Interpretation
+
+Patchwork makes it possible to combine scatter plots, box plots, trend lines, and bar charts into a single figure. This helps present different aspects of a dataset together.
+
+
+## About This Document
+
+This section records information about the R environment and packages used to generate this report.
+
+```{r}
+sessionInfo()
+```

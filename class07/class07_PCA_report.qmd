@@ -1,0 +1,472 @@
+---
+title: "Class 07: PCA Analysis"
+author: "Jingxuan Wu A18624595"
+format: pdf
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+# 1. PCA of UK Food Data
+
+## Data Import
+
+```{r}
+url <- "https://tinyurl.com/UK-foods"
+x <- read.csv(url)
+```
+
+## Q1. Data Dimensions
+
+**Question:** How many rows and columns are in the data frame x? What R functions could you use to answer these questions?
+
+```{r}
+dim(x)
+nrow(x)
+ncol(x)
+```
+
+**Answer:**
+
+The data frame x contains 17 rows and 5 columns. We can use dim(x) to find both dimensions, nrow(x) to find the number of rows, and ncol(x) to find the number of columns.
+
+## Checking Your Data
+
+We first inspect the data to check whether it was imported correctly.
+
+```{r}
+head(x)
+```
+
+The dataset initially contains 17 rows and 5 columns. However, the first column contains food names and should be used as row names.
+
+We can correct this by importing the data again and specifying the first column as row names.
+
+```{r}
+x <- read.csv(url, row.names=1)
+head(x)
+dim(x)
+```
+
+After correcting the row names, the dataset contains 17 rows and 4 columns.
+
+## Q2. Correcting Row Names
+
+**Question:** Which approach to solving the row-names problem do you prefer and why? Is one approach more robust than another under certain circumstances?
+
+**Answer:**
+
+I prefer the second approach, using `read.csv(url, row.names=1)`, because it is simpler and requires fewer lines of code. It directly sets the first column as row names when importing the data. However, the first approach is more flexible when the dataset structure is uncertain because we can inspect the data before choosing which column to use as row names.
+
+## Spotting Major Differences and Trends
+
+First, we create a bar plot showing food consumption across the four countries.
+
+```{r}
+#| fig-width: 8
+#| fig-height: 5
+
+barplot(as.matrix(x),
+        beside=TRUE,
+        col=rainbow(nrow(x)))
+```
+
+## Q3. Stacked Bar Plot
+
+**Question:** Changing what optional argument in the above barplot() function results in the following plot?
+
+```{r}
+#| fig-width: 8
+#| fig-height: 5
+
+barplot(as.matrix(x),
+        beside=FALSE,
+        col=rainbow(nrow(x)))
+```
+
+**Answer:**
+
+Changing the `beside` argument from `TRUE` to `FALSE` produces the stacked bar plot. When `beside=TRUE`, the bars are displayed side by side. When `beside=FALSE`, the bars are stacked on top of each other.
+
+
+## Converting Data to Long Format
+
+The original dataset contains 17 rows and 4 columns. We convert it into long format for visualization using ggplot2.
+
+```{r}
+library(tidyr)
+
+x_long <- x |>
+  tibble::rownames_to_column("Food") |>
+  pivot_longer(
+    cols = -Food,
+    names_to = "Country",
+    values_to = "Consumption"
+  )
+
+dim(x_long)
+head(x_long)
+```
+
+The long-format dataset contains 68 rows and 3 columns.
+
+## Grouped Bar Plot Using ggplot2
+
+```{r}
+#| fig-width: 9
+#| fig-height: 6
+
+library(ggplot2)
+
+ggplot(x_long) +
+  aes(x = Country, y = Consumption, fill = Food) +
+  geom_col(position = "dodge") +
+  theme_bw()
+```
+
+## Q4. Stacked Bar Plot
+
+**Question:** Changing what optional argument in the above ggplot() code results in a stacked barplot figure?
+
+```{r}
+#| fig-width: 9
+#| fig-height: 6
+
+ggplot(x_long) +
+  aes(x = Country, y = Consumption, fill = Food) +
+  geom_col(position = "stack") +
+  theme_bw()
+```
+
+**Answer:**
+
+Changing the `position` argument in `geom_col()` from `"dodge"` to `"stack"` produces a stacked bar plot. The `"dodge"` option displays bars side by side, while `"stack"` places them on top of each other.
+
+## Q5. Pairwise Scatter Plots
+
+**Question:** What does it mean if a given point lies on the diagonal for a given plot?
+
+```{r}
+#| fig-width: 8
+#| fig-height: 8
+
+pairs(x,
+      col = rainbow(nrow(x)),
+      pch = 16)
+```
+
+**Answer:**
+
+The `pairs()` function creates scatter plots comparing food consumption between every pair of countries. Each point represents one food type, and the colors distinguish different foods. If a point lies on the diagonal line (y = x) of a scatter plot, it means that the two countries have equal consumption of that particular food. Points close to this line indicate similar consumption levels, while points farther away indicate larger differences.
+
+## Heatmap Analysis
+
+We use a heatmap to visualize food consumption patterns and identify similarities between countries.
+
+```{r}
+#| fig-width: 9
+#| fig-height: 7
+
+library(pheatmap)
+
+pheatmap(as.matrix(x))
+```
+
+## Q6. Food Consumption Patterns
+
+**Question:** Based on the pairs and heatmap figures, which countries cluster together and what does this suggest about their food consumption patterns? Can you easily tell what the main differences between N. Ireland and the other countries of the UK are?
+
+**Answer:**
+
+England and Wales cluster closely together, with Scotland also showing similar food consumption patterns. Northern Ireland is more distinct from the other three countries.
+
+This suggests that England, Wales, and Scotland have more similar overall food consumption patterns, while Northern Ireland has some differences. However, the main differences are not immediately obvious from the plots alone. Looking at the original data, Northern Ireland consumes more fresh potatoes but less fresh fruit, alcoholic drinks, and cheese compared with the other countries.
+
+
+# PCA Analysis
+
+## Performing PCA
+
+We perform principal component analysis using the `prcomp()` function. The data are transposed so that countries represent observations and food types represent variables.
+
+```{r}
+library(ggplot2)
+
+pca <- prcomp(t(x))
+summary(pca)
+```
+
+The first principal component (PC1) explains approximately 67.44% of the total variance, while PC2 explains approximately 29.05%. Together, they explain approximately 96.5% of the variance.
+
+## Q7. PC1 vs PC2 Plot
+
+**Question:** Complete the code to generate a plot of PC1 vs PC2 with country labels.
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+
+df <- as.data.frame(pca$x)
+df$Country <- rownames(df)
+
+ggplot(df, aes(x = PC1, y = PC2, label = Country)) +
+  geom_point(size = 3) +
+  geom_text(vjust = -0.5) +
+  xlim(-270, 500) +
+  xlab("PC1") +
+  ylab("PC2") +
+  theme_bw()
+```
+
+**Answer:**
+
+The PCA plot shows the four countries based on their first two principal components. Northern Ireland is clearly separated from the other three countries along PC1, suggesting differences in food consumption patterns.
+
+## Q8. Customizing Country Colors
+
+**Question:** Customize the plot so that the country labels match the colors in the UK and Ireland map.
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+
+ggplot(df, aes(x = PC1, y = PC2, label = Country)) +
+  geom_point(color = "grey70", size = 3) +
+  geom_text(aes(color = Country), vjust = -0.5) +
+  scale_color_manual(values = c(
+    "England" = "orange",
+    "Wales" = "red",
+    "Scotland" = "blue",
+    "N.Ireland" = "darkgreen"
+  )) +
+  xlim(-270, 500) +
+  xlab("PC1") +
+  ylab("PC2") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+**Answer:**
+
+I customized the PCA plot by using `geom_text(aes(color = Country))` and `scale_color_manual()` to assign different colors to the country labels. England is orange, Wales is red, Scotland is blue, and Northern Ireland is green.
+
+## Variance Explained by Principal Components
+
+We calculate the percentage of total variance explained by each principal component.
+
+```{r}
+v <- round(pca$sdev^2 / sum(pca$sdev^2) * 100)
+v
+
+z <- summary(pca)
+z$importance
+```
+
+## Scree Plot
+
+```{r}
+#| fig-width: 8
+#| fig-height: 5
+
+variance_df <- data.frame(
+  PC = factor(
+    paste0("PC", 1:length(v)),
+    levels = paste0("PC", 1:length(v))
+  ),
+  Variance = v
+)
+
+ggplot(variance_df) +
+  aes(x = PC, y = Variance) +
+  geom_col(fill = "steelblue") +
+  xlab("Principal Component") +
+  ylab("Percent Variation") +
+  theme_bw()
+```
+
+PC1 and PC2 together explain approximately 96.5% of the total variance. This indicates that two principal components capture most of the variation in the original dataset.
+
+## PC1 Loading Plot
+
+We examine the loadings to understand which food types contribute most strongly to PC1.
+
+```{r}
+#| fig-width: 9
+#| fig-height: 6
+
+loadings <- as.data.frame(pca$rotation)
+loadings$Food <- rownames(loadings)
+
+ggplot(loadings) +
+  aes(x = PC1, y = reorder(Food, PC1)) +
+  geom_col(fill = "steelblue") +
+  xlab("PC1 Loading Score") +
+  ylab("") +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 9))
+```
+
+Fresh potatoes and soft drinks have positive PC1 loadings, while fresh fruit and alcoholic drinks have negative loadings. These variables help explain why Northern Ireland is separated from the other countries along PC1.
+
+## Q9. PC2 Loading Plot
+
+**Question:** Generate a similar loadings plot for PC2. What two food groups feature prominently and what does PC2 mainly tell us about?
+
+```{r}
+#| fig-width: 9
+#| fig-height: 6
+
+ggplot(loadings) +
+  aes(x = PC2, y = reorder(Food, PC2)) +
+  geom_col(fill = "steelblue") +
+  xlab("PC2 Loading Score") +
+  ylab("") +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 9))
+```
+
+**Answer:**
+
+The two most prominent food groups in the PC2 loading plot are fresh potatoes and soft drinks. Fresh potatoes have a strong negative loading, while soft drinks have a strong positive loading.
+
+PC2 mainly represents differences in the consumption of these two food groups. Scotland has a higher PC2 score, associated with higher soft drink consumption and lower fresh potato consumption. Wales has a lower PC2 score, showing the opposite pattern.
+
+
+# 2. PCA of RNA-seq Data
+
+## Data Import
+
+We first import the RNA-seq dataset and check its dimensions.
+
+```{r}
+url2 <- "https://tinyurl.com/expression-CSV"
+rna.data <- read.csv(url2, row.names = 1)
+
+dim(rna.data)
+head(rna.data)
+```
+
+## Q10. RNA-seq Data Dimensions and PCA
+
+**Question:** How many genes and samples are in this data set? How many PCs do you think it will take to have a useful overview of this data set?
+
+**Answer:**
+
+The dataset contains 100 genes and 10 samples, including 5 wild-type (WT) samples and 5 knockout (KO) samples.
+
+The first principal component (PC1) explains approximately 92.6% of the total variance, so PC1 alone captures most of the variation in the dataset. However, using the first two principal components (PC1 and PC2), which together explain approximately 94.9% of the variance, provides a useful two-dimensional overview of the data.
+
+## Performing PCA on RNA-seq Data
+
+```{r}
+library(ggplot2)
+
+rna_pca <- prcomp(t(rna.data), scale. = TRUE)
+summary(rna_pca)
+```
+
+## PCA Plot
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+
+rna_df <- as.data.frame(rna_pca$x)
+rna_df$Sample <- rownames(rna_df)
+
+ggplot(rna_df, aes(x = PC1, y = PC2, label = Sample)) +
+  geom_point(size = 3) +
+  geom_text(vjust = -0.5, size = 3) +
+  xlab("PC1") +
+  ylab("PC2") +
+  theme_bw()
+```
+
+The PCA plot shows a clear separation between WT and KO samples along PC1, suggesting differences in their overall gene expression patterns.
+
+## Variance Explained
+
+```{r}
+rna.var <- rna_pca$sdev^2
+rna.var.per <- round(
+  rna.var / sum(rna.var) * 100, 1
+)
+rna.var.per
+```
+
+## RNA-seq Scree Plot
+
+```{r}
+#| fig-width: 8
+#| fig-height: 5
+
+scree_df <- data.frame(
+  PC = factor(
+    paste0("PC", 1:10),
+    levels = paste0("PC", 1:10)
+  ),
+  PercentVariation = rna.var.per
+)
+
+ggplot(scree_df) +
+  aes(x = PC, y = PercentVariation) +
+  geom_col(fill = "steelblue") +
+  ggtitle("RNA-seq Scree Plot") +
+  xlab("Principal Component") +
+  ylab("Percent Variation") +
+  theme_bw()
+```
+
+PC1 accounts for approximately 92.6% of the total variance, indicating that most of the variation can be summarized by a single principal component.
+
+## PCA Plot with Sample Groups
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+
+rna_df$Condition <- ifelse(
+  grepl("^wt", rna_df$Sample),
+  "WT",
+  "KO"
+)
+
+ggplot(rna_df,
+       aes(x = PC1, y = PC2,
+           color = Condition,
+           label = Sample)) +
+  geom_point(size = 3) +
+  geom_text(vjust = -0.5, size = 3) +
+  scale_color_manual(
+    values = c("WT" = "red", "KO" = "blue")
+  ) +
+  xlab(paste0("PC1 (", rna.var.per[1], "%)")) +
+  ylab(paste0("PC2 (", rna.var.per[2], "%)")) +
+  theme_bw()
+```
+
+The WT samples cluster together on the negative side of PC1, while the KO samples cluster on the positive side. This separation suggests systematic differences in gene expression between the two groups.
+
+## Gene Loadings (Optional)
+
+We identify the ten genes with the largest absolute loading scores for PC1.
+
+```{r}
+loading_scores <- rna_pca$rotation[, 1]
+
+gene_scores <- abs(loading_scores)
+gene_score_ranked <- sort(
+  gene_scores,
+  decreasing = TRUE
+)
+
+top_10_genes <- names(gene_score_ranked[1:10])
+top_10_genes
+```
+
+# Session Information
+
+```{r}
+sessionInfo()
+```
