@@ -1,2 +1,3 @@
-# bimm143
-Bioinformatics coursework at UC San Diego.
+# BIMM143
+
+This repo is for my UCSD bioinformatics class.
